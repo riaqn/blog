@@ -1,0 +1,5 @@
+<ul>
+    $forall post <- posts
+        <li>
+            <a href=@{Post $ pack $ fst post}> #{fst post}
+            - #{show (snd post)}
