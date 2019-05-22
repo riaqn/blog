@@ -21,18 +21,22 @@ import Text.Blaze.Html.Renderer.Text
 data Route = Index
            | Page Text
            | Post Text
-           | Css
+           | Css Text
 
-data Config = Config { title :: Text } 
+data SiteConfig = SiteConfig { siteTitle :: String } 
 
-config :: Config
-config = Config { title = "rational irrationality" }
+data PageConfig = PageConfig { pageTitle :: Maybe String
+                             , pageMtime :: Maybe UTCTime
+                             }
+
+siteConfig :: SiteConfig
+siteConfig = SiteConfig { siteTitle = "rational irrationality" }
 
 render :: Route -> [(Text, Text)] -> Text
 render Index _ =  "/index.html"
 render (Page s) _ = "/pages/" <> s <> ".html"
 render (Post s) _ = "/posts/" <> s <> ".html"
-render Css _ = "/css/default.css"
+render (Css s) _ = "/css/" <> s <> ".css"
 
 indexTemplate :: FilePath
 indexTemplate = "templates/index.html"
@@ -40,9 +44,8 @@ indexTemplate = "templates/index.html"
 frameTemplate :: FilePath
 frameTemplate = "templates/frame.html"
 
-
-frame :: String -> [String] -> Html -> HtmlUrl Route
-frame subtitle pages body = $(hamletFile "templates/frame.html")
+frame ::  PageConfig -> [String] -> Html -> HtmlUrl Route
+frame pageConfig pages body = $(hamletFile "templates/frame.html")
 
 index :: [(String, UTCTime)] -> HtmlUrl Route
 index posts = $(hamletFile "templates/index.html")
@@ -71,17 +74,23 @@ main = shakeArgs shakeOptions $ do
             return (post, time)
             ) posts
         let body = index posts' render
-        let html = frame "Posts" pages body render
+        let html = frame (PageConfig { pageTitle = Nothing
+                                    , pageMtime = Nothing
+                                    }) pages body render
         liftIO $ TLIO.writeFile out $ renderHtml html
 
     [ site </> "pages" </> "*.html", site </> "posts" </> "*.html"] |%> \out -> do 
-        let base = dropExtension $ dropDirectory1 $ dropDirectory1 $ out
-        let inp = dropDirectory1 $ out -<.> "org"
+        let base = dropExtension $ dropDirectory1 out
+        let inp = base <.> "org"
+
         need [inp, frameTemplate]
         liftIO $ do 
+            mtime <- getModificationTime inp
             org <- TIO.readFile inp
             let result = runPure $ do 
                 doc <- readOrg def org
                 writeHtml5 def doc
             html <- handleError result
-            TLIO.writeFile out $ renderHtml $ frame base pages html render
+            TLIO.writeFile out $ renderHtml $ frame (PageConfig { pageTitle = Just $ dropDirectory1 base
+                                                                , pageMtime = Just mtime
+                                                                }) pages html render
